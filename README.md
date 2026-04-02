@@ -257,6 +257,21 @@ The suite is intentionally shaped around production-like failure modes rather th
 - negative control without downstream idempotency
   - proves the system really would duplicate sends if notifier dedupe were removed
 
+## Why This Is Production-Oriented
+
+The code intentionally keeps infrastructure in-memory, but the behavior mirrors
+real distributed systems boundaries:
+
+- idempotency is enforced at ingress and at downstream delivery boundaries
+- queue processing is modeled as at-least-once, not exactly-once
+- retries and dead-letter outcomes are explicit and observable
+- partial failure modes (send success with ack loss) are handled without
+  duplicate user-facing notifications
+- correlation and trace metadata are preserved from API to worker/notifier logs
+
+This makes the implementation suitable as a correctness baseline before swapping
+in external queue/broker and transport adapters.
+
 ## Running The Project
 
 Create a local environment and install dependencies:
