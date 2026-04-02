@@ -35,9 +35,22 @@ class NotificationWorker:
 
         event = self._state_store.get(event_id)
 
+        if event.processing_state is ProcessingState.FAILED:
+            self._logs.record(
+                "worker.replayed",
+                event_id=event.event_id,
+                idempotency_key=event.idempotency_key,
+                correlation_id=event.correlation_id,
+                trace_id=event.trace_id,
+                attempt=event.attempt,
+                processing_state=event.processing_state.value,
+            )
+            self._queue.ack(event_id)
+            return "failed"
+
         if event.processing_state is ProcessingState.SENT:
             self._logs.record(
-                "worker.started",
+                "worker.replayed",
                 event_id=event.event_id,
                 idempotency_key=event.idempotency_key,
                 correlation_id=event.correlation_id,

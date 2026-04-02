@@ -70,22 +70,21 @@ class DeduplicatingNotifier:
 
     def notify(self, event: NotificationEvent, *, metrics: InMemoryMetrics, logs: InMemoryLogSink) -> NotificationResult:
         with self._lock:
-            already_delivered = event.event_id in self._delivered_event_ids
+            if event.event_id in self._delivered_event_ids:
+                metrics.increment("notification.deduped")
+                logs.record(
+                    "notifier.deduped",
+                    event_id=event.event_id,
+                    idempotency_key=event.idempotency_key,
+                    correlation_id=event.correlation_id,
+                    trace_id=event.trace_id,
+                    attempt=event.attempt,
+                )
+                return NotificationResult(status="deduped")
 
-        if already_delivered:
-            metrics.increment("notification.deduped")
-            logs.record(
-                "notifier.deduped",
-                event_id=event.event_id,
-                idempotency_key=event.idempotency_key,
-                correlation_id=event.correlation_id,
-                trace_id=event.trace_id,
-                attempt=event.attempt,
-            )
-            return NotificationResult(status="deduped")
-
-        self._transport.send(event=event)
-        with self._lock:
+            # Keep check+send+mark atomic to prevent duplicate downstream sends
+            # when workers race on replayed deliveries.
+            self._transport.send(event=event)
             self._delivered_event_ids.add(event.event_id)
 
         metrics.increment("notification.sent")
